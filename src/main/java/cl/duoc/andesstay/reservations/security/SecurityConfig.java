@@ -30,22 +30,35 @@ public class SecurityConfig {
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/reservations"
-                        ).hasAnyRole("CLIENTE", "ADMIN")
+                        ).hasAnyRole(
+                                "CLIENTE",
+                                "OPERADOR",
+                                "ADMIN"
+                        )
 
                         .requestMatchers(
                                 HttpMethod.PATCH,
                                 "/api/reservations/*/confirm"
-                        ).hasRole("ADMIN")
+                        ).hasAnyRole(
+                                "OPERADOR",
+                                "ADMIN"
+                        )
 
                         .requestMatchers(
                                 HttpMethod.PATCH,
                                 "/api/reservations/*/cancel"
-                        ).hasAnyRole("CLIENTE", "ADMIN")
+                        ).hasAnyRole(
+                                "OPERADOR",
+                                "ADMIN"
+                        )
 
                         .requestMatchers(
                                 HttpMethod.PUT,
-                                "/api/reservations/*"
-                        ).hasAnyRole("CLIENTE", "ADMIN")
+                                "/api/reservations/*/status"
+                        ).hasAnyRole(
+                                "OPERADOR",
+                                "ADMIN"
+                        )
 
                         .requestMatchers(
                                 HttpMethod.GET,

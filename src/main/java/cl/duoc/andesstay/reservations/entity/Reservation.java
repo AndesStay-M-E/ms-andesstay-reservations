@@ -41,7 +41,7 @@ public class Reservation {
     private BigDecimal totalAmount;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @Column(nullable = false, length = 30)
     private ReservationStatus status;
 
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -60,7 +60,7 @@ public class Reservation {
         updatedAt = now;
 
         if (status == null) {
-            status = ReservationStatus.PENDING;
+            status = ReservationStatus.CREADA;
         }
     }
 

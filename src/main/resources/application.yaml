@@ -8,6 +8,27 @@ spring:
   profiles:
     default: local
 
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:andesstay}
+    password: ${RABBITMQ_PASSWORD:andesstay_dev}
+    virtual-host: /
+
+    connection-timeout: 5s
+
+    publisher-confirm-type: correlated
+    publisher-returns: true
+
+    template:
+      mandatory: true
+      retry:
+        enabled: true
+        initial-interval: 1s
+        max-interval: 5s
+        multiplier: 2.0
+        max-retries: 3
+
   security:
     oauth2:
       resourceserver:

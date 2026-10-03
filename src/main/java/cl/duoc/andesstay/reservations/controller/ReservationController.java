@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.*;
+import cl.duoc.andesstay.reservations.dto.ReservationStatusRequest;
 
 import java.util.List;
 
@@ -39,6 +40,20 @@ public class ReservationController {
                 .status(HttpStatus.CREATED)
                 .body(response);
     }
+
+    @PutMapping("/{id}/status")
+        public ResponseEntity<ReservationResponse> updateStatus(
+                @PathVariable Long id,
+                @Valid @RequestBody ReservationStatusRequest request
+        ) {
+
+        return ResponseEntity.ok(
+                reservationService.updateStatus(
+                        id,
+                        request.status()
+                )
+        );
+        }
 
     @GetMapping
     public ResponseEntity<List<ReservationResponse>> findAll() {

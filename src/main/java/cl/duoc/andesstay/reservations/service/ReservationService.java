@@ -61,6 +61,22 @@ public class ReservationService {
         Reservation saved =
                 reservationRepository.save(reservation);
 
+        /*
+         * Evento de creación (sin estado previo). Solo lo recibe
+         * auditoría; no genera comandos.
+         */
+        eventPublisher.publishEvent(
+                new ReservationStatusChangedEvent(
+                        saved.getId(),
+                        saved.getUserEmail(),
+                        saved.getAccommodationId(),
+                        saved.getCheckInDate(),
+                        saved.getCheckOutDate(),
+                        null,
+                        ReservationStatus.CREADA
+                )
+        );
+
         return toResponse(saved);
     }
 

@@ -17,6 +17,8 @@ spring:
 
     connection-timeout: 5s
 
+    # Confirmación del broker y devolución de mensajes sin cola destino.
+    # Los callbacks están en RabbitPublisherCallbacksConfig.
     publisher-confirm-type: correlated
     publisher-returns: true
 
@@ -34,3 +36,35 @@ spring:
       resourceserver:
         jwt:
           issuer-uri: https://login.microsoftonline.com/24b1cd18-d18e-4855-bcaf-51ac2db566d5/v2.0
+
+# =====================================================================
+# Nombres de mensajería centralizados (MessagingProperties).
+# Deben ser IGUALES en todos los microservicios.
+# =====================================================================
+andesstay:
+  messaging:
+    exchanges:
+      commands: andesstay.commands
+      events: andesstay.events
+      dead-letter: andesstay.dlx
+
+    # Prefijo de la routing key de eventos: reservation.<estado>
+    event-routing-key-prefix: "reservation."
+
+    routes:
+      email:
+        queue: notify.email.q
+        routing-key: email.send
+        dead-letter-queue: notify.email.dlq
+      housekeeping:
+        queue: catalog.housekeeping.q
+        routing-key: housekeeping.ticket
+        dead-letter-queue: catalog.housekeeping.dlq
+      voucher:
+        queue: report.voucher.q
+        routing-key: voucher.gen
+        dead-letter-queue: report.voucher.dlq
+      audit:
+        queue: audit.reservation.q
+        routing-key: "reservation.#"
+        dead-letter-queue: audit.reservation.dlq

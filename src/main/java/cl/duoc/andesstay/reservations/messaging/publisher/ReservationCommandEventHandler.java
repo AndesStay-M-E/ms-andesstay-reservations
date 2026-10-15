@@ -1,7 +1,7 @@
 package cl.duoc.andesstay.reservations.messaging.publisher;
 
 import cl.duoc.andesstay.reservations.entity.ReservationStatus;
-import cl.duoc.andesstay.reservations.messaging.config.RabbitMQConfig;
+import cl.duoc.andesstay.reservations.messaging.config.MessagingProperties;
 import cl.duoc.andesstay.reservations.messaging.event.ReservationStatusChangedEvent;
 import cl.duoc.andesstay.reservations.messaging.model.CommandEnvelope;
 import cl.duoc.andesstay.reservations.messaging.model.EmailCommandPayload;
@@ -11,18 +11,34 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
+import java.util.Locale;
 import java.util.UUID;
 
+/**
+ * Traduce los cambios de estado de una reserva en mensajes RabbitMQ.
+ *
+ * Se ejecuta DESPUÉS del commit: si la transacción falla, no se envía nada.
+ *
+ *  - Siempre: evento al exchange topic (auditoría).
+ *  - CONFIRMADA: correo + ticket de preparación + voucher.
+ *  - CHECKIN_PENDIENTE: correo recordatorio.
+ *  - CHECKOUT: correo + ticket de limpieza.
+ */
 @Component
 public class ReservationCommandEventHandler {
 
+    private static final String RESERVATION_EVENT_TYPE =
+            "reservation.status-changed";
+
     private final ReservationCommandPublisher publisher;
-    
+    private final MessagingProperties properties;
 
     public ReservationCommandEventHandler(
-            ReservationCommandPublisher publisher
+            ReservationCommandPublisher publisher,
+            MessagingProperties properties
     ) {
         this.publisher = publisher;
+        this.properties = properties;
     }
 
     @TransactionalEventListener(
@@ -38,159 +54,133 @@ public class ReservationCommandEventHandler {
         String correlationId =
                 "reservation-" + event.reservationId();
 
+        publishAuditEvent(event, traceId, correlationId);
+
         if (event.newStatus() == ReservationStatus.CONFIRMADA) {
-
-            publishConfirmationCommands(
-                    event,
-                    traceId,
-                    correlationId
-            );
+            publishConfirmationCommands(event, traceId, correlationId);
         }
 
-        if (event.newStatus()
-                == ReservationStatus.CHECKIN_PENDIENTE) {
-
-            publishCheckInReminder(
-                    event,
-                    traceId,
-                    correlationId
-            );
+        if (event.newStatus() == ReservationStatus.CHECKIN_PENDIENTE) {
+            publishCheckInReminder(event, traceId, correlationId);
         }
 
-        if (event.newStatus()
-                == ReservationStatus.CHECKOUT) {
-
-            publishCheckoutCommands(
-                    event,
-                    traceId,
-                    correlationId
-            );
+        if (event.newStatus() == ReservationStatus.CHECKOUT) {
+            publishCheckoutCommands(event, traceId, correlationId);
         }
     }
 
-    private void publishConfirmationCommands(
-        ReservationStatusChangedEvent event,
-        String traceId,
-        String correlationId
+    /**
+     * Routing key del evento: prefijo + estado. Ej: reservation.confirmada
+     */
+    private void publishAuditEvent(
+            ReservationStatusChangedEvent event,
+            String traceId,
+            String correlationId
     ) {
+        String routingKey =
+                properties.eventRoutingKeyPrefix()
+                        + event.newStatus().name().toLowerCase(Locale.ROOT);
 
-        var emailPayload =
-                new EmailCommandPayload(
-                        event.reservationId(),
-                        event.userEmail(),
-                        "RESERVATION_CONFIRMED"
-                );
-
-        publisher.publish(
-                RabbitMQConfig.EMAIL_SEND,
+        publisher.publishEvent(
+                routingKey,
                 CommandEnvelope.create(
-                        RabbitMQConfig.EMAIL_SEND,
+                        RESERVATION_EVENT_TYPE,
                         traceId,
                         correlationId,
-                        emailPayload
+                        event
                 )
         );
+    }
 
-        var housekeepingPayload =
-                new HousekeepingCommandPayload(
-                        event.reservationId(),
-                        event.accommodationId(),
-                        event.checkInDate(),
-                        event.checkOutDate(),
-                        "PREPARE_ROOM"
-                );
+    private void publishConfirmationCommands(
+            ReservationStatusChangedEvent event,
+            String traceId,
+            String correlationId
+    ) {
+        sendEmail(event, traceId, correlationId, "RESERVATION_CONFIRMED");
 
-        publisher.publish(
-                RabbitMQConfig.HOUSEKEEPING_TICKET,
+        sendHousekeeping(event, traceId, correlationId, "PREPARE_ROOM");
+
+        String voucherKey = properties.routes().voucher().routingKey();
+
+        publisher.publishCommand(
+                voucherKey,
                 CommandEnvelope.create(
-                        RabbitMQConfig.HOUSEKEEPING_TICKET,
+                        voucherKey,
                         traceId,
                         correlationId,
-                        housekeepingPayload
-                )
-        );
-
-        var voucherPayload =
-                new VoucherCommandPayload(
-                        event.reservationId(),
-                        event.userEmail(),
-                        "RESERVATION_VOUCHER"
-                );
-
-        publisher.publish(
-                RabbitMQConfig.VOUCHER_GENERATE,
-                CommandEnvelope.create(
-                        RabbitMQConfig.VOUCHER_GENERATE,
-                        traceId,
-                        correlationId,
-                        voucherPayload
+                        new VoucherCommandPayload(
+                                event.reservationId(),
+                                event.userEmail(),
+                                "RESERVATION_VOUCHER"
+                        )
                 )
         );
     }
 
     private void publishCheckInReminder(
-        ReservationStatusChangedEvent event,
-        String traceId,
-        String correlationId
+            ReservationStatusChangedEvent event,
+            String traceId,
+            String correlationId
     ) {
+        sendEmail(event, traceId, correlationId, "CHECKIN_REMINDER");
+    }
 
-        var payload =
-                new EmailCommandPayload(
-                        event.reservationId(),
-                        event.userEmail(),
-                        "CHECKIN_REMINDER"
-                );
+    private void publishCheckoutCommands(
+            ReservationStatusChangedEvent event,
+            String traceId,
+            String correlationId
+    ) {
+        sendEmail(event, traceId, correlationId, "CHECKOUT_COMPLETED");
 
-        publisher.publish(
-                RabbitMQConfig.EMAIL_SEND,
+        sendHousekeeping(event, traceId, correlationId, "CLEAN_ROOM");
+    }
+
+    private void sendEmail(
+            ReservationStatusChangedEvent event,
+            String traceId,
+            String correlationId,
+            String notificationType
+    ) {
+        String emailKey = properties.routes().email().routingKey();
+
+        publisher.publishCommand(
+                emailKey,
                 CommandEnvelope.create(
-                        RabbitMQConfig.EMAIL_SEND,
+                        emailKey,
                         traceId,
                         correlationId,
-                        payload
+                        new EmailCommandPayload(
+                                event.reservationId(),
+                                event.userEmail(),
+                                notificationType
+                        )
                 )
         );
     }
 
-    private void publishCheckoutCommands(
-        ReservationStatusChangedEvent event,
-        String traceId,
-        String correlationId
+    private void sendHousekeeping(
+            ReservationStatusChangedEvent event,
+            String traceId,
+            String correlationId,
+            String action
     ) {
+        String housekeepingKey =
+                properties.routes().housekeeping().routingKey();
 
-        var emailPayload =
-                new EmailCommandPayload(
-                        event.reservationId(),
-                        event.userEmail(),
-                        "CHECKOUT_COMPLETED"
-                );
-
-        publisher.publish(
-                RabbitMQConfig.EMAIL_SEND,
+        publisher.publishCommand(
+                housekeepingKey,
                 CommandEnvelope.create(
-                        RabbitMQConfig.EMAIL_SEND,
+                        housekeepingKey,
                         traceId,
                         correlationId,
-                        emailPayload
-                )
-        );
-
-        var housekeepingPayload =
-                new HousekeepingCommandPayload(
-                        event.reservationId(),
-                        event.accommodationId(),
-                        event.checkInDate(),
-                        event.checkOutDate(),
-                        "CLEAN_ROOM"
-                );
-
-        publisher.publish(
-                RabbitMQConfig.HOUSEKEEPING_TICKET,
-                CommandEnvelope.create(
-                        RabbitMQConfig.HOUSEKEEPING_TICKET,
-                        traceId,
-                        correlationId,
-                        housekeepingPayload
+                        new HousekeepingCommandPayload(
+                                event.reservationId(),
+                                event.accommodationId(),
+                                event.checkInDate(),
+                                event.checkOutDate(),
+                                action
+                        )
                 )
         );
     }

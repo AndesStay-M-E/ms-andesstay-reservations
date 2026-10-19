@@ -25,7 +25,7 @@ public class SecurityConfig {
                 )
                 .authorizeHttpRequests(authorize -> authorize
 
-                        .requestMatchers("/actuator/**").permitAll()
+                        .requestMatchers("/actuator/health", "/actuator/info").permitAll()
 
                         .requestMatchers(
                                 HttpMethod.POST,
@@ -48,6 +48,7 @@ public class SecurityConfig {
                                 HttpMethod.PATCH,
                                 "/api/reservations/*/cancel"
                         ).hasAnyRole(
+                                "CLIENTE",
                                 "OPERADOR",
                                 "ADMIN"
                         )

@@ -8,7 +8,7 @@ Microservicio de reservas de AndesStay (puerto **8081**). Es el **productor** de
 |---|---|---|
 | `local` (por defecto) | H2 en archivo (`./data`) | Desarrollo en el PC |
 | `cloud` | Base de datos en la nube (AWS RDS) | Ambiente cloud |
-| `eduardo` | — | Tenant de Azure AD de Eduardo |
+El tenant de Entra ID AndesStay (Endfield398) es la configuración predeterminada en `application.yaml`.
 
 ### Perfil `cloud` (AWS RDS)
 

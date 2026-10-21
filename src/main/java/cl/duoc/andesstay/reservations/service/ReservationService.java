@@ -12,6 +12,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @Service
@@ -20,13 +21,16 @@ public class ReservationService {
 
     private final ReservationRepository reservationRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final AccommodationPricingClient pricingClient;
 
     public ReservationService(
             ReservationRepository reservationRepository,
-            ApplicationEventPublisher eventPublisher
+            ApplicationEventPublisher eventPublisher,
+            AccommodationPricingClient pricingClient
     ) {
         this.reservationRepository = reservationRepository;
         this.eventPublisher = eventPublisher;
+        this.pricingClient = pricingClient;
     }
 
     /*
@@ -37,7 +41,8 @@ public class ReservationService {
 
     public ReservationResponse create(
             String userEmail,
-            ReservationRequest request
+            ReservationRequest request,
+            String authorization
     ) {
 
         validateDates(request);
@@ -46,9 +51,12 @@ public class ReservationService {
 
         reservation.setUserEmail(userEmail);
 
+        // Recalcular siempre en el servidor; nunca confiar en el monto del navegador.
+        BigDecimal totalAmount = pricingClient.calculate(request, authorization);
         applyRequest(
                 reservation,
-                request
+                request,
+                totalAmount
         );
 
         /*
@@ -265,7 +273,8 @@ public class ReservationService {
 
     public ReservationResponse update(
             Long id,
-            ReservationRequest request
+            ReservationRequest request,
+            String authorization
     ) {
 
         validateDates(request);
@@ -300,9 +309,12 @@ public class ReservationService {
             );
         }
 
+        // Recalcular siempre en el servidor; nunca confiar en el monto del navegador.
+        BigDecimal totalAmount = pricingClient.calculate(request, authorization);
         applyRequest(
                 reservation,
-                request
+                request,
+                totalAmount
         );
 
         Reservation saved =
@@ -385,7 +397,8 @@ public class ReservationService {
 
     private void applyRequest(
             Reservation reservation,
-            ReservationRequest request
+            ReservationRequest request,
+            BigDecimal totalAmount
     ) {
 
         reservation.setAccommodationId(
@@ -404,9 +417,7 @@ public class ReservationService {
                 request.guests()
         );
 
-        reservation.setTotalAmount(
-                request.totalAmount()
-        );
+        reservation.setTotalAmount(totalAmount);
     }
 
     private ReservationResponse toResponse(

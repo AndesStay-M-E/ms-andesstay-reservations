@@ -4,6 +4,7 @@ import cl.duoc.andesstay.reservations.dto.ReservationRequest;
 import cl.duoc.andesstay.reservations.dto.ReservationResponse;
 import cl.duoc.andesstay.reservations.service.ReservationService;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
@@ -27,13 +28,15 @@ public class ReservationController {
     @PostMapping
     public ResponseEntity<ReservationResponse> create(
             JwtAuthenticationToken authentication,
-            @Valid @RequestBody ReservationRequest request
+            @Valid @RequestBody ReservationRequest request,
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String authorization
     ) {
         String userEmail = getCurrentUserEmail(authentication);
 
         ReservationResponse response = reservationService.create(
                 userEmail,
-                request
+                request,
+                authorization
         );
 
         return ResponseEntity
@@ -82,12 +85,13 @@ public class ReservationController {
     public ResponseEntity<ReservationResponse> update(
             JwtAuthenticationToken authentication,
             @PathVariable Long id,
-            @Valid @RequestBody ReservationRequest request
+            @Valid @RequestBody ReservationRequest request,
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String authorization
     ) {
         validateOwnerOrAdmin(authentication, id);
 
         return ResponseEntity.ok(
-                reservationService.update(id, request)
+                reservationService.update(id, request, authorization)
         );
     }
 
